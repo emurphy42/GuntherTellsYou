@@ -16,24 +16,44 @@ namespace GuntherTellsYou
     internal class ObjectPatches
     {
         // unclear how to use __state when standard function has optional parameters
-        static NetVector2Dictionary<int, NetInt> museumPiecesBeforeAction;
+        static bool rearrangingInProgress = false;
+        static readonly List<int> museumIDsBeforeAction = new();
 
         // wait till user exits menu, then display dialogues for any donated items
         // also, displaying dialogue during MuseumMenu_receiveLeftClick_Postfix() leaves UI in a stuck state
-        static readonly List<int> newlyDonatedItems = new List<int>();
+        static readonly List<int> newlyDonatedItems = new();
 
         // initialized by ModEntry.cs
         public static IMonitor ModMonitor; // allow patches to call ModMonitor.Log()
-        public static string ItemDelimiter; // separates name/description of multiple items donated at once
+
+        public static void LibraryMuseum_answerDialogueAction_Postfix(string questionAndAnswer, string[] questionParams)
+        {
+            try
+            {
+                rearrangingInProgress = (questionAndAnswer == "Museum_Rearrange_Yes");
+            }
+            catch (Exception ex)
+            {
+                ModMonitor.Log($"[Gunther Tells You] Exception in LibraryMuseum_rearrange_Postfix: {ex.Message} - {ex.StackTrace}", LogLevel.Error);
+            }
+        }
 
         public static bool MuseumMenu_receiveLeftClick_Prefix(int x, int y, bool playSound = true)
         {
             try
             {
-                // retain copy of museum donations before the action
-                museumPiecesBeforeAction = null;
-                // ShallowClone is apparently insufficient
-                museumPiecesBeforeAction = (Game1.currentLocation as LibraryMuseum).museumPieces.DeepClone<NetVector2Dictionary<int, NetInt>>();
+                if (!rearrangingInProgress)
+                {
+                    // retain copy of museum donations before the action
+                    // ShallowClone is apparently insufficient, DeepClone ran into an error
+                    museumIDsBeforeAction.Clear();
+                    var museumPieces = (Game1.currentLocation as LibraryMuseum).museumPieces;
+                    foreach (var key in museumPieces.Keys)
+                    {
+                        var itemID = museumPieces[key];
+                        museumIDsBeforeAction.Add(itemID);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -48,16 +68,21 @@ namespace GuntherTellsYou
         {
             try
             {
-                // did we succeed in retaining copy of museum donations before the action?
-                if (museumPiecesBeforeAction == null)
+                if (rearrangingInProgress)
                 {
-                    ModMonitor.Log($"[Gunther Tells You] Issue in MuseumMenu_receiveLeftClick_Postfix: museumPiecesBeforeAction is null", LogLevel.Debug);
+                    return;
+                }
+
+                // did we succeed in retaining copy of museum donations before the action?
+                if (museumIDsBeforeAction == null)
+                {
+                    ModMonitor.Log($"[Gunther Tells You] Issue in MuseumMenu_receiveLeftClick_Postfix: museumIDsBeforeAction is null", LogLevel.Debug);
                     return;
                 }
 
                 // did museum donations change?
                 var museumPiecesAfterAction = (Game1.currentLocation as LibraryMuseum).museumPieces;
-                if (museumPiecesAfterAction.Count() == museumPiecesBeforeAction.Count())
+                if (museumPiecesAfterAction.Count() == museumIDsBeforeAction.Count)
                 {
                     return;
                 }
@@ -65,17 +90,14 @@ namespace GuntherTellsYou
                 // find and record new item
                 foreach (var key in museumPiecesAfterAction.Keys)
                 {
-                    if (!museumPiecesBeforeAction.ContainsKey(key))
+                    var itemID = museumPiecesAfterAction[key];
+                    if (!museumIDsBeforeAction.Contains(itemID) && !newlyDonatedItems.Contains(itemID))
                     {
-                        var itemID = museumPiecesAfterAction[key];
-                        if (!newlyDonatedItems.Contains(itemID))
-                        {
-                            newlyDonatedItems.Add(itemID);
-                            // https://stardewcommunitywiki.com/Modding:Object_data
-                            var itemName = Game1.objectInformation[itemID].Split('/')[0];
-                            var itemDescription = Game1.objectInformation[itemID].Split('/')[5];
-                            ModMonitor.Log($"[Gunther Tells You] Recorded donated item: {itemID} - {itemName} - {itemDescription}", LogLevel.Debug);
-                        }
+                        newlyDonatedItems.Add(itemID);
+                        // https://stardewcommunitywiki.com/Modding:Object_data
+                        var itemName = Game1.objectInformation[itemID].Split('/')[0];
+                        var itemDescription = Game1.objectInformation[itemID].Split('/')[5];
+                        ModMonitor.Log($"[Gunther Tells You] Recorded donated item: {itemID} - {itemName} - {itemDescription}", LogLevel.Debug);
                     }
                 }
             }
@@ -85,39 +107,49 @@ namespace GuntherTellsYou
             }
         }
 
-        // display dialogue(s) after exiting menu
+        // display dialogue if relevant
+        private static void displayDialogue()
+        {
+            if (newlyDonatedItems.Count == 0)
+            {
+                return;
+            }
+
+            var itemID = newlyDonatedItems[0];
+            var itemName = Game1.objectInformation[itemID].Split('/')[0];
+            var itemDescription = Game1.objectInformation[itemID].Split('/')[5];
+            var dialogueText = $"{itemName} - {itemDescription}";
+            ModMonitor.Log($"[Gunther Tells You] Added donated item to dialogue: {itemID} - {itemName} - {itemDescription}", LogLevel.Debug);
+            Game1.drawDialogue(Game1.getCharacterFromName("Gunther"), Game1.parseText(dialogueText));
+
+            newlyDonatedItems.Remove(itemID);
+        }
+
+        // display dialogue after exiting menu
         public static void MuseumMenu_exitThisMenu_Postfix(bool playSound = true)
         {
             try
             {
-                if (newlyDonatedItems.Count == 0)
-                {
-                    return;
-                }
-
-                // calling drawDialogue() or drawDialogueNoTyping() multiple times causes only one to be effective
-                // so instead, combine multiple items into one longer dialogue block
-                // DialogueBox() uses '#' as a delimiter, but that also causes only one to be effective
-                // newlines are munged to spaces, so punt and default to something that typically wraps onto its own line
-                var dialogueText = "";
-                foreach (var itemID in newlyDonatedItems)
-                {
-                    var itemName = Game1.objectInformation[itemID].Split('/')[0];
-                    var itemDescription = Game1.objectInformation[itemID].Split('/')[5];
-                    if (dialogueText != "")
-                    {
-                        dialogueText += $" {ItemDelimiter} ";
-                    }
-                    dialogueText += $"{itemName} - {itemDescription}";
-                    ModMonitor.Log($"[Gunther Tells You] Added donated item to dialogue: {itemID} - {itemName} - {itemDescription}", LogLevel.Debug);
-                }
-                Game1.drawDialogue(Game1.getCharacterFromName("Gunther"), Game1.parseText(dialogueText));
-
-                newlyDonatedItems.Clear();
+                displayDialogue();
             }
             catch (Exception ex)
             {
                 ModMonitor.Log($"[Gunther Tells You] Exception in MuseumMenu_exitThisMenu_Postfix: {ex.Message} - {ex.StackTrace}", LogLevel.Error);
+            }
+        }
+
+        // in case multiple items were donated at once:
+        // calling drawDialogue() or drawDialogueNoTyping() multiple times causes only one to be effective
+        // so also display dialogue after closing dialogue
+        public static void DialogueBox_closeDialogue_Postfix()
+        {
+            try
+            {
+                displayDialogue();
+            }
+            catch (Exception ex)
+            {
+                ModMonitor.Log($"[Gunther Tells You] Exception in DialogueBox_closeDialogue_Postfix: {ex.Message} - {ex.StackTrace}", LogLevel.Error);
             }
         }
     }
