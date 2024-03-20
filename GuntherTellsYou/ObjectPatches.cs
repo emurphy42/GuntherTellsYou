@@ -10,6 +10,7 @@ using StardewValley.Network;
 using Netcode;
 using StardewModdingAPI;
 using StardewValley.Objects;
+using StardewValley.TokenizableStrings;
 
 namespace GuntherTellsYou
 {
@@ -17,11 +18,11 @@ namespace GuntherTellsYou
     {
         // unclear how to use __state when standard function has optional parameters
         static bool rearrangingInProgress = false;
-        static readonly List<int> museumIDsBeforeAction = new();
+        static readonly List<string> museumIDsBeforeAction = new();
 
         // wait till user exits menu, then display dialogues for any donated items
         // also, displaying dialogue during MuseumMenu_receiveLeftClick_Postfix() leaves UI in a stuck state
-        static readonly List<int> newlyDonatedItems = new();
+        static readonly List<string> newlyDonatedItems = new();
 
         // initialized by ModEntry.cs
         public static IMonitor ModMonitor; // allow patches to call ModMonitor.Log()
@@ -94,9 +95,8 @@ namespace GuntherTellsYou
                     if (!museumIDsBeforeAction.Contains(itemID) && !newlyDonatedItems.Contains(itemID))
                     {
                         newlyDonatedItems.Add(itemID);
-                        // https://stardewcommunitywiki.com/Modding:Object_data
-                        var itemName = Game1.objectInformation[itemID].Split('/')[0];
-                        var itemDescription = Game1.objectInformation[itemID].Split('/')[5];
+                        var itemName = TokenParser.ParseText(Game1.objectData[itemID].DisplayName);
+                        var itemDescription = TokenParser.ParseText(Game1.objectData[itemID].Description);
                         ModMonitor.Log($"[Gunther Tells You] Recorded donated item: {itemID} - {itemName} - {itemDescription}", LogLevel.Debug);
                     }
                 }
@@ -116,11 +116,15 @@ namespace GuntherTellsYou
             }
 
             var itemID = newlyDonatedItems[0];
-            var itemName = Game1.objectInformation[itemID].Split('/')[0];
-            var itemDescription = Game1.objectInformation[itemID].Split('/')[5];
+            var itemName = TokenParser.ParseText(Game1.objectData[itemID].DisplayName);
+            var itemDescription = TokenParser.ParseText(Game1.objectData[itemID].Description);
             var dialogueText = $"{itemName} - {itemDescription}";
             ModMonitor.Log($"[Gunther Tells You] Added donated item to dialogue: {itemID} - {itemName} - {itemDescription}", LogLevel.Debug);
-            Game1.drawDialogue(Game1.getCharacterFromName("Gunther"), Game1.parseText(dialogueText));
+            Game1.DrawDialogue(new Dialogue(
+                speaker: Game1.getCharacterFromName("Gunther"),
+                translationKey: null,
+                dialogueText: Game1.parseText(dialogueText)
+            ));
 
             newlyDonatedItems.Remove(itemID);
         }
@@ -139,7 +143,7 @@ namespace GuntherTellsYou
         }
 
         // in case multiple items were donated at once:
-        // calling drawDialogue() or drawDialogueNoTyping() multiple times causes only one to be effective
+        // (in 1.5) calling drawDialogue() or drawDialogueNoTyping() multiple times causes only one to be effective
         // so also display dialogue after closing dialogue
         public static void DialogueBox_closeDialogue_Postfix()
         {
