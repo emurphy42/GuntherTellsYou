@@ -2,14 +2,7 @@
 using StardewValley;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Force.DeepCloner;
-using StardewValley.Network;
-using Netcode;
 using StardewModdingAPI;
-using StardewValley.Objects;
 using StardewValley.TokenizableStrings;
 
 namespace GuntherTellsYou
@@ -17,7 +10,6 @@ namespace GuntherTellsYou
     internal class ObjectPatches
     {
         // unclear how to use __state when standard function has optional parameters
-        static bool rearrangingInProgress = false;
         static readonly List<string> museumIDsBeforeAction = new();
 
         // wait till user exits menu, then display dialogues for any donated items
@@ -27,54 +19,31 @@ namespace GuntherTellsYou
         // initialized by ModEntry.cs
         public static IMonitor ModMonitor; // allow patches to call ModMonitor.Log()
 
-        public static void LibraryMuseum_answerDialogueAction_Postfix(string questionAndAnswer, string[] questionParams)
+        public static void LibraryMuseum_OpenDonationMenu_Postfix()
         {
             try
             {
-                rearrangingInProgress = (questionAndAnswer == "Museum_Rearrange_Yes");
-            }
-            catch (Exception ex)
-            {
-                ModMonitor.Log($"[Gunther Tells You] Exception in LibraryMuseum_rearrange_Postfix: {ex.Message} - {ex.StackTrace}", LogLevel.Error);
-            }
-        }
-
-        public static bool MuseumMenu_receiveLeftClick_Prefix(int x, int y, bool playSound = true)
-        {
-            try
-            {
-                if (!rearrangingInProgress)
+                // retain copy of museum donations before the action
+                // ShallowClone is apparently insufficient, DeepClone ran into an error
+                museumIDsBeforeAction.Clear();
+                var museumPieces = (Game1.currentLocation as LibraryMuseum).museumPieces;
+                foreach (var key in museumPieces.Keys)
                 {
-                    // retain copy of museum donations before the action
-                    // ShallowClone is apparently insufficient, DeepClone ran into an error
-                    museumIDsBeforeAction.Clear();
-                    var museumPieces = (Game1.currentLocation as LibraryMuseum).museumPieces;
-                    foreach (var key in museumPieces.Keys)
-                    {
-                        var itemID = museumPieces[key];
-                        museumIDsBeforeAction.Add(itemID);
-                    }
+                    var itemID = museumPieces[key];
+                    museumIDsBeforeAction.Add(itemID);
                 }
             }
             catch (Exception ex)
             {
-                ModMonitor.Log($"[Gunther Tells You] Exception in MuseumMenu_receiveLeftClick_Prefix: {ex.Message} - {ex.StackTrace}", LogLevel.Error);
+                ModMonitor.Log($"[Gunther Tells You] Exception in LibraryMuseum_OpenDonationMenu_Postfix: {ex.Message} - {ex.StackTrace}", LogLevel.Error);
             }
-
-            // run standard function
-            return true;
         }
 
         public static void MuseumMenu_receiveLeftClick_Postfix(int x, int y, bool playSound = true)
         {
             try
             {
-                if (rearrangingInProgress)
-                {
-                    return;
-                }
-
-                // did we succeed in retaining copy of museum donations before the action?
+                // did we succeed in retaining copy of museum donations earlier?
                 if (museumIDsBeforeAction == null)
                 {
                     ModMonitor.Log($"[Gunther Tells You] Issue in MuseumMenu_receiveLeftClick_Postfix: museumIDsBeforeAction is null", LogLevel.Debug);
