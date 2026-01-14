@@ -9,6 +9,8 @@ namespace GuntherTellsYou
 {
     internal class ObjectPatches
     {
+        static bool donationInProgress = false;
+
         // unclear how to use __state when standard function has optional parameters
         static readonly List<string> museumIDsBeforeAction = new();
 
@@ -21,6 +23,8 @@ namespace GuntherTellsYou
 
         public static void LibraryMuseum_OpenDonationMenu_Postfix()
         {
+            donationInProgress = true;
+
             try
             {
                 // retain copy of museum donations before the action
@@ -37,6 +41,11 @@ namespace GuntherTellsYou
             {
                 ModMonitor.Log($"[Gunther Tells You] Exception in LibraryMuseum_OpenDonationMenu_Postfix: {ex.Message} - {ex.StackTrace}", LogLevel.Error);
             }
+        }
+
+        public static void LibraryMuseum_OpenRearrangeMenu_Postfix()
+        {
+            donationInProgress = false;
         }
 
         public static void MuseumMenu_receiveLeftClick_Postfix(int x, int y, bool playSound = true)
@@ -79,8 +88,15 @@ namespace GuntherTellsYou
         // display dialogue if relevant
         private static void displayDialogue()
         {
+            if (!donationInProgress)
+            {
+                newlyDonatedItems.Clear();
+                return;
+            }
+
             if (newlyDonatedItems.Count == 0)
             {
+                donationInProgress = false;
                 return;
             }
 

@@ -31,6 +31,12 @@ namespace GuntherTellsYou
                postfix: new HarmonyMethod(typeof(ObjectPatches), nameof(ObjectPatches.LibraryMuseum_OpenDonationMenu_Postfix))
             );
 
+            // detect start of rearrange
+            harmony.Patch(
+                original: AccessTools.Method(typeof(StardewValley.Locations.LibraryMuseum), nameof(StardewValley.Locations.LibraryMuseum.OpenRearrangeMenu)),
+                postfix: new HarmonyMethod(typeof(ObjectPatches), nameof(ObjectPatches.LibraryMuseum_OpenRearrangeMenu_Postfix))
+            );
+
             // detect when items are donated            
             harmony.Patch(
                original: AccessTools.Method(typeof(StardewValley.Menus.MuseumMenu), nameof(StardewValley.Menus.MuseumMenu.receiveLeftClick)),
