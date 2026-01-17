@@ -9,7 +9,7 @@ namespace GuntherTellsYou
 {
     internal class ObjectPatches
     {
-        static bool donationInProgress = false;
+        static long? farmerDonatingItems = null;
 
         // unclear how to use __state when standard function has optional parameters
         static readonly List<string> museumIDsBeforeAction = new();
@@ -23,7 +23,7 @@ namespace GuntherTellsYou
 
         public static void LibraryMuseum_OpenDonationMenu_Postfix()
         {
-            donationInProgress = true;
+            farmerDonatingItems = Game1.player.UniqueMultiplayerID;
 
             try
             {
@@ -45,7 +45,7 @@ namespace GuntherTellsYou
 
         public static void LibraryMuseum_OpenRearrangeMenu_Postfix()
         {
-            donationInProgress = false;
+            farmerDonatingItems = null;
         }
 
         public static void MuseumMenu_receiveLeftClick_Postfix(int x, int y, bool playSound = true)
@@ -88,15 +88,20 @@ namespace GuntherTellsYou
         // display dialogue if relevant
         private static void displayDialogue()
         {
-            if (!donationInProgress)
+            if (farmerDonatingItems == null)
             {
                 newlyDonatedItems.Clear();
                 return;
             }
 
+            if (farmerDonatingItems != Game1.player.UniqueMultiplayerID)
+            {
+                return;
+            }
+
             if (newlyDonatedItems.Count == 0)
             {
-                donationInProgress = false;
+                farmerDonatingItems = null;
                 return;
             }
 

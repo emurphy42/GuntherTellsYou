@@ -1,7 +1,7 @@
 {
   "Name": "Gunther Tells You",
   "Author": "John Peters (you know, the farmer?)",
-  "Version": "1.2.0",
+  "Version": "1.3.0",
   "Description": "Displays item descriptions when you donate them to the museum.",
   "UniqueID": "JohnPeters.GuntherTellsYou",
   "EntryDll": "GuntherTellsYou.dll",
